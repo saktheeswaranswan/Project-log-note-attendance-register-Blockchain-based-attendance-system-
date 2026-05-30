@@ -1,0 +1,297 @@
+int students = 100;
+int days = 100;
+
+String[] names = new String[students];
+char[][] attendance = new char[students][days];
+String[] dateLabels = new String[days];
+
+int[] dailyPresent = new int[days];
+int[] dailyAbsent = new int[days];
+
+int rowH = 30;
+int colW = 26;
+
+int marginX = 20;
+int marginTop = 100;
+int headerH = 40;
+int nameColW = 180;
+int tallyColW = 95;
+int summaryBoxH = 54;
+
+float scrollX = 0;
+float scrollY = 0;
+float lastX;
+float lastY;
+
+void setup() {
+  fullScreen();
+  smooth(4);
+  rectMode(CORNER);
+  textAlign(CENTER, CENTER);
+
+  randomSeed(millis());
+
+  for (int i = 0; i < students; i++) {
+    names[i] = randomName();
+  }
+
+  createDates();
+  generateAttendance();
+}
+
+void draw() {
+  background(255);
+
+  drawTitle();
+
+  pushMatrix();
+  translate(scrollX, scrollY);
+  drawRegister();
+  popMatrix();
+}
+
+void drawTitle() {
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text("POLYTECHNIC ATTENDANCE REGISTER - SEMESTER", width / 2, 35);
+
+  textSize(12);
+  fill(80);
+  text("Drag mouse to scroll", width / 2, 58);
+}
+
+void createDates() {
+  int day = 30;
+  int month = 5;
+
+  for (int i = days - 1; i >= 0; i--) {
+    dateLabels[i] = nf(day, 2) + "/" + nf(month, 2);
+    day--;
+
+    if (day <= 0) {
+      month--;
+      if (month == 4 || month == 6 || month == 9 || month == 11) {
+        day = 30;
+      } else if (month == 2) {
+        day = 28;
+      } else {
+        day = 31;
+      }
+
+      if (month <= 0) {
+        month = 12;
+      }
+    }
+  }
+}
+
+void generateAttendance() {
+  for (int s = 0; s < students; s++) {
+    for (int d = 0; d < days; d++) {
+      attendance[s][d] = 'P';
+    }
+
+    int absentDays = int(random(0, 20));
+    int placed = 0;
+
+    while (placed < absentDays) {
+      int day = int(random(days));
+      if (attendance[s][day] != 'A') {
+        attendance[s][day] = 'A';
+        placed++;
+      }
+    }
+  }
+
+  // Force sample rows for testing
+  for (int d = 0; d < days; d++) {
+    attendance[0][d] = 'P';
+  }
+  for (int d = 0; d < 12; d++) {
+    attendance[0][d] = 'A';
+  }
+
+  for (int d = 0; d < days; d++) {
+    attendance[1][d] = 'P';
+  }
+  attendance[1][0] = 'A';
+  attendance[1][1] = 'A';
+  attendance[1][2] = 'A';
+
+  calculateDailyTotals();
+}
+
+void calculateDailyTotals() {
+  for (int d = 0; d < days; d++) {
+    int p = 0;
+    int a = 0;
+
+    for (int s = 0; s < students; s++) {
+      if (attendance[s][d] == 'A') a++;
+      else p++;
+    }
+
+    dailyPresent[d] = p;
+    dailyAbsent[d] = a;
+  }
+}
+
+void drawRegister() {
+  int startY = marginTop;
+  int nameX = marginX;
+  int dateStartX = nameX + nameColW;
+  int tallyX1 = dateStartX + days * colW + 30;
+  int tallyX2 = tallyX1 + tallyColW + 20;
+
+  int rowStartY = startY + headerH;
+  int summaryY = rowStartY + students * rowH + 80;
+
+  int contentWidth = dateStartX + days * colW + tallyColW * 2 + 80;
+  int contentHeight = summaryY + summaryBoxH + 120;
+
+  // Header background
+  fill(235);
+  stroke(0);
+  strokeWeight(1);
+  rect(nameX, startY, nameColW, headerH);
+
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW;
+    rect(x, startY, colW, headerH);
+  }
+
+  rect(tallyX1, startY, tallyColW, headerH);
+  rect(tallyX2, startY, tallyColW, headerH);
+
+  // Header labels
+  fill(0);
+  textSize(12);
+  textAlign(CENTER, CENTER);
+  text("NAME", nameX + nameColW / 2, startY + headerH / 2);
+
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW + colW / 2;
+
+    pushMatrix();
+    translate(x, startY + headerH / 2);
+    rotate(-HALF_PI);
+    fill(0);
+    text(dateLabels[d], 0, 0);
+    popMatrix();
+  }
+
+  fill(255, 0, 0);
+  text("ABSENT", tallyX1 + tallyColW / 2, startY + headerH / 2);
+
+  fill(0, 0, 255);
+  text("PRESENT", tallyX2 + tallyColW / 2, startY + headerH / 2);
+
+  // Student rows
+  textSize(11);
+
+  for (int s = 0; s < students; s++) {
+    int y = rowStartY + s * rowH;
+
+    // Name cell
+    fill(255);
+    stroke(180);
+    rect(nameX, y, nameColW, rowH);
+
+    fill(0);
+    textAlign(LEFT, CENTER);
+    text(names[s], nameX + 8, y + rowH / 2);
+
+    int absent = 0;
+    int present = 0;
+
+    for (int d = 0; d < days; d++) {
+      int x = dateStartX + d * colW;
+
+      fill(255);
+      stroke(200);
+      rect(x, y, colW, rowH);
+
+      if (attendance[s][d] == 'A') {
+        fill(255, 0, 0);
+        absent++;
+      } else {
+        fill(0, 0, 255);
+        present++;
+      }
+
+      textAlign(CENTER, CENTER);
+      text(attendance[s][d], x + colW / 2, y + rowH / 2);
+    }
+
+    fill(255, 0, 0);
+    textAlign(CENTER, CENTER);
+    text(absent + "/100", tallyX1 + tallyColW / 2, y + rowH / 2);
+
+    fill(0, 0, 255);
+    text(present + "/100", tallyX2 + tallyColW / 2, y + rowH / 2);
+  }
+
+  // Daily summary title
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(18);
+  text("DAILY ATTENDANCE SUMMARY", nameX, summaryY - 32);
+
+  // Daily summary boxes aligned below the same date columns
+  textSize(10);
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW;
+
+    fill(250);
+    stroke(160);
+    rect(x, summaryY, colW, summaryBoxH);
+
+    fill(0);
+    textAlign(CENTER, CENTER);
+    text(dateLabels[d], x + colW / 2, summaryY + 11);
+
+    fill(0, 0, 255);
+    text("P:" + dailyPresent[d], x + colW / 2, summaryY + 27);
+
+    fill(255, 0, 0);
+    text("A:" + dailyAbsent[d], x + colW / 2, summaryY + 42);
+  }
+
+  // Update scroll limits using the full content size
+  minScrollX = min(0, width - (contentWidth + 40));
+  minScrollY = min(0, height - (contentHeight + 40));
+}
+
+float minScrollX = 0;
+float minScrollY = 0;
+
+String randomName() {
+  String[] first = {
+    "Arun", "Karthik", "Vijay", "Ajith", "Ravi", "Prakash", "Dinesh", "Suresh", "Manoj", "Hari",
+    "Deepak", "Saravanan", "Kumar", "Bala", "Ramesh", "Gokul", "Naveen", "Pravin", "Sathish", "Ashok"
+  };
+
+  String[] last = {
+    "Kumar", "Raj", "Vel", "Selvan", "Nathan", "Murugan", "Prasad", "Babu", "Mohan", "Krishnan",
+    "Raja", "Pandian", "Shankar", "Reddy", "Das"
+  };
+
+  return first[int(random(first.length))] + " " + last[int(random(last.length))];
+}
+
+void mousePressed() {
+  lastX = mouseX;
+  lastY = mouseY;
+}
+
+void mouseDragged() {
+  scrollX += mouseX - lastX;
+  scrollY += mouseY - lastY;
+
+  scrollX = constrain(scrollX, minScrollX, 0);
+  scrollY = constrain(scrollY, minScrollY, 0);
+
+  lastX = mouseX;
+  lastY = mouseY;
+}
