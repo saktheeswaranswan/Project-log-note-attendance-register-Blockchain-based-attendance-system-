@@ -1,0 +1,1098 @@
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+
+// ------------------------------------------------------------
+// MAIN SCREEN CONTROL
+// ------------------------------------------------------------
+int screen = 1;   // 1 = students, 2 = staff/lab, 3 = semester calendar, 4 = timetable, 5 = adjustment
+
+int days = 100;
+int rowH = 30;
+int colW = 28;
+
+int marginX = 20;
+int marginTop = 100;
+int headerH = 44;
+
+int nameColW = 185;
+int roleColW = 130;
+int qualColW = 170;
+int semColW = 80;
+int tallyColW = 95;
+int summaryBoxH = 54;
+
+// Shared date labels for attendance screens
+String[] dateLabels = new String[days];
+
+// ------------------------------------------------------------
+// SCREEN 1: STUDENTS
+// ------------------------------------------------------------
+int students = 100;
+String[] studentNames = new String[students];
+char[][] studentAttendance = new char[students][days];
+int[] studentRowPresent = new int[students];
+int[] studentRowAbsent = new int[students];
+int[] studentDailyPresent = new int[days];
+int[] studentDailyAbsent = new int[days];
+
+float scrollX1 = 0;
+float scrollY1 = 0;
+float lastX1;
+float lastY1;
+float minScrollX1 = 0;
+float minScrollY1 = 0;
+
+// ------------------------------------------------------------
+// SCREEN 2: STAFF / LAB
+// ------------------------------------------------------------
+int staffCount;
+int labCount;
+int totalRows;
+
+String[] staffNames;
+String[] staffRoles;
+String[] staffQualifications;
+String[] staffSemesterTags;
+char[][] staffAttendance;
+int[] staffRowPresent;
+int[] staffRowAbsent;
+int[] staffDailyPresent;
+int[] staffDailyAbsent;
+
+float scrollX2 = 0;
+float scrollY2 = 0;
+float lastX2;
+float lastY2;
+float minScrollX2 = 0;
+float minScrollY2 = 0;
+
+// ------------------------------------------------------------
+// SCREEN 3: SEMESTER CALENDAR (2026)
+// ------------------------------------------------------------
+int semesterYear = 2026;
+int semesterStartMonth = 0;   // 0 = January
+int semesterMonthCount = 6;    // Jan to Jun (edit if needed)
+String[] monthNames = {
+  "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+  "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
+};
+String[] weekNames = { "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN" };
+
+// Edit these holiday dates to match your college calendar
+String[] fixedHolidayDates = {
+  "01/01/2026",
+  "14/01/2026",
+  "26/01/2026",
+  "14/04/2026",
+  "01/05/2026",
+  "29/05/2026"
+};
+
+// ------------------------------------------------------------
+// SCREEN 4: SEMESTER TIMETABLE
+// ------------------------------------------------------------
+String[] ttDays = { "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+String[] ttPeriods = {
+  "P1\n09:00-09:50",
+  "P2\n09:50-10:40",
+  "P3\n11:00-11:50",
+  "P4\n11:50-12:40",
+  "P5\n01:30-02:20",
+  "P6\n02:20-03:10",
+  "P7\n03:10-04:00"
+};
+
+String[][] semesterTT = {
+  { "Mathematics", "Physics", "English", "C Programming", "DBMS", "Lab" },
+  { "Physics", "Mathematics", "C Programming", "DBMS", "Workshop", "Sports" },
+  { "English", "DBMS", "Mathematics", "Programming Lab", "Library", "Tutorial" },
+  { "C Programming", "Physics", "Workshop", "Mathematics", "DBMS", "Lab" },
+  { "DBMS", "English", "Mathematics", "C Programming", "Seminar", "Sports" },
+  { "Lab", "Lab", "Tutorial", "Project", "Mentoring", "Class Test" },
+  { "Mathematics", "DBMS", "Physics", "English", "C Programming", "Library" }
+};
+
+// ------------------------------------------------------------
+// SCREEN 5: ADJUSTMENT / STAFF ACCOUNT
+// ------------------------------------------------------------
+float scrollX5 = 0;
+float scrollY5 = 0;
+float lastX5;
+float lastY5;
+float minScrollX5 = 0;
+float minScrollY5 = 0;
+
+// ------------------------------------------------------------
+// TAB UI
+// ------------------------------------------------------------
+int tabY = 18;
+int tabH = 34;
+int tabGap = 8;
+
+// ------------------------------------------------------------
+// SETUP
+// ------------------------------------------------------------
+void setup() {
+  fullScreen();
+  smooth(4);
+  rectMode(CORNER);
+  textAlign(CENTER, CENTER);
+  randomSeed(millis());
+
+  createDates();
+  generateStudentData();
+  generateStaffData();
+}
+
+// ------------------------------------------------------------
+// DRAW
+// ------------------------------------------------------------
+void draw() {
+  background(255);
+  drawTopBar();
+
+  if (screen == 1) {
+    pushMatrix();
+    translate(scrollX1, scrollY1);
+    drawStudentRegister();
+    popMatrix();
+  } 
+  else if (screen == 2) {
+    pushMatrix();
+    translate(scrollX2, scrollY2);
+    drawStaffRegister();
+    popMatrix();
+  } 
+  else if (screen == 3) {
+    drawSemesterCalendar();
+  } 
+  else if (screen == 4) {
+    drawSemesterTimeTable();
+  } 
+  else if (screen == 5) {
+    pushMatrix();
+    translate(scrollX5, scrollY5);
+    drawAdjustmentScreen();
+    popMatrix();
+  }
+}
+
+// ------------------------------------------------------------
+// TOP BAR
+// ------------------------------------------------------------
+void drawTopBar() {
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text("ATTENDANCE REGISTER", width / 2, 32);
+
+  textSize(12);
+  fill(80);
+  text("Click tabs to switch screens. Drag mouse to scroll on Screens 1, 2, and 5. Press R to regenerate data.", width / 2, 58);
+
+  int tabW = (width - 2 * marginX - 4 * tabGap) / 5;
+
+  String[] tabNames = {
+    "S1 STUDENTS",
+    "S2 STAFF",
+    "S3 CALENDAR",
+    "S4 TIMETABLE",
+    "S5 ADJUSTMENT"
+  };
+
+  for (int i = 0; i < 5; i++) {
+    int x = marginX + i * (tabW + tabGap);
+
+    if (screen == i + 1) fill(30, 120, 220);
+    else fill(235);
+
+    stroke(0);
+    rect(x, tabY, tabW, tabH);
+
+    fill(screen == i + 1 ? 255 : 0);
+    textSize(13);
+    text(tabNames[i], x + tabW / 2, tabY + tabH / 2);
+  }
+}
+
+// ------------------------------------------------------------
+// DATE LABELS FOR ATTENDANCE SCREENS
+// ------------------------------------------------------------
+void createDates() {
+  Calendar end = Calendar.getInstance();
+  end.set(Calendar.HOUR_OF_DAY, 0);
+  end.set(Calendar.MINUTE, 0);
+  end.set(Calendar.SECOND, 0);
+  end.set(Calendar.MILLISECOND, 0);
+
+  for (int i = 0; i < days; i++) {
+    Calendar c = (Calendar) end.clone();
+    c.add(Calendar.DAY_OF_YEAR, i - days + 1);
+
+    int dd = c.get(Calendar.DAY_OF_MONTH);
+    int mm = c.get(Calendar.MONTH) + 1;
+    dateLabels[i] = nf(dd, 2) + "/" + nf(mm, 2);
+  }
+}
+
+// ------------------------------------------------------------
+// SCREEN 1: STUDENTS
+// ------------------------------------------------------------
+void generateStudentData() {
+  for (int i = 0; i < students; i++) {
+    studentNames[i] = randomName();
+  }
+
+  for (int s = 0; s < students; s++) {
+    for (int d = 0; d < days; d++) {
+      studentAttendance[s][d] = 'P';
+    }
+
+    int absentDays = int(random(0, 20));
+    int placed = 0;
+    while (placed < absentDays) {
+      int day = int(random(days));
+      if (studentAttendance[s][day] != 'A') {
+        studentAttendance[s][day] = 'A';
+        placed++;
+      }
+    }
+  }
+
+  // Sample rows for testing
+  for (int d = 0; d < days; d++) studentAttendance[0][d] = 'P';
+  for (int d = 0; d < 12; d++) studentAttendance[0][d] = 'A';
+
+  for (int d = 0; d < days; d++) studentAttendance[1][d] = 'P';
+  studentAttendance[1][0] = 'A';
+  studentAttendance[1][1] = 'A';
+  studentAttendance[1][2] = 'A';
+
+  calculateStudentTotals();
+  clampStudentScroll();
+}
+
+void calculateStudentTotals() {
+  for (int s = 0; s < students; s++) {
+    int p = 0;
+    int a = 0;
+    for (int d = 0; d < days; d++) {
+      if (studentAttendance[s][d] == 'A') a++;
+      else p++;
+    }
+    studentRowPresent[s] = p;
+    studentRowAbsent[s] = a;
+  }
+
+  for (int d = 0; d < days; d++) {
+    int p = 0;
+    int a = 0;
+    for (int s = 0; s < students; s++) {
+      if (studentAttendance[s][d] == 'A') a++;
+      else p++;
+    }
+    studentDailyPresent[d] = p;
+    studentDailyAbsent[d] = a;
+  }
+}
+
+void drawStudentRegister() {
+  int startY = marginTop;
+
+  int nameX = marginX;
+  int dateStartX = nameX + nameColW;
+  int tallyX1 = dateStartX + days * colW + 30;
+  int tallyX2 = tallyX1 + tallyColW + 20;
+
+  int rowStartY = startY + headerH;
+  int summaryY = rowStartY + students * rowH + 80;
+
+  int contentWidth = tallyX2 + tallyColW + 70;
+  int contentHeight = summaryY + summaryBoxH + 120;
+
+  minScrollX1 = min(0, width - contentWidth);
+  minScrollY1 = min(0, height - contentHeight);
+  clampStudentScroll();
+
+  // Header
+  fill(235);
+  stroke(0);
+  strokeWeight(1);
+  rect(nameX, startY, nameColW, headerH);
+
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW;
+    rect(x, startY, colW, headerH);
+  }
+
+  rect(tallyX1, startY, tallyColW, headerH);
+  rect(tallyX2, startY, tallyColW, headerH);
+
+  fill(0);
+  textSize(12);
+  textAlign(CENTER, CENTER);
+  text("NAME", nameX + nameColW / 2, startY + headerH / 2);
+
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW + colW / 2;
+    pushMatrix();
+    translate(x, startY + headerH / 2);
+    rotate(-HALF_PI);
+    fill(0);
+    textSize(10);
+    text(dateLabels[d], 0, 0);
+    popMatrix();
+  }
+
+  fill(220, 0, 0);
+  textSize(12);
+  text("ABSENT", tallyX1 + tallyColW / 2, startY + headerH / 2);
+
+  fill(0, 0, 220);
+  text("PRESENT", tallyX2 + tallyColW / 2, startY + headerH / 2);
+
+  // Rows
+  textSize(11);
+  for (int s = 0; s < students; s++) {
+    int y = rowStartY + s * rowH;
+
+    fill((s % 2 == 0) ? 252 : 246);
+    stroke(200);
+    rect(nameX, y, nameColW, rowH);
+
+    fill(0);
+    textAlign(LEFT, CENTER);
+    text(studentNames[s], nameX + 8, y + rowH / 2);
+
+    for (int d = 0; d < days; d++) {
+      int x = dateStartX + d * colW;
+
+      fill(255);
+      stroke(210);
+      rect(x, y, colW, rowH);
+
+      if (studentAttendance[s][d] == 'A') fill(220, 0, 0);
+      else fill(0, 0, 220);
+
+      textAlign(CENTER, CENTER);
+      text(studentAttendance[s][d], x + colW / 2, y + rowH / 2);
+    }
+
+    fill(220, 0, 0);
+    textAlign(CENTER, CENTER);
+    text(studentRowAbsent[s] + "/" + days, tallyX1 + tallyColW / 2, y + rowH / 2);
+
+    fill(0, 0, 220);
+    text(studentRowPresent[s] + "/" + days, tallyX2 + tallyColW / 2, y + rowH / 2);
+  }
+
+  // Daily summary
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(18);
+  text("DAILY ATTENDANCE SUMMARY", nameX, summaryY - 32);
+
+  textSize(10);
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW;
+
+    fill(250);
+    stroke(160);
+    rect(x, summaryY, colW, summaryBoxH);
+
+    fill(0);
+    textAlign(CENTER, CENTER);
+    text(dateLabels[d], x + colW / 2, summaryY + 11);
+
+    fill(0, 0, 220);
+    text("P:" + studentDailyPresent[d], x + colW / 2, summaryY + 27);
+
+    fill(220, 0, 0);
+    text("A:" + studentDailyAbsent[d], x + colW / 2, summaryY + 42);
+  }
+}
+
+void clampStudentScroll() {
+  scrollX1 = constrain(scrollX1, minScrollX1, 0);
+  scrollY1 = constrain(scrollY1, minScrollY1, 0);
+}
+
+// ------------------------------------------------------------
+// SCREEN 2: STAFF / LAB
+// ------------------------------------------------------------
+void generateStaffData() {
+  staffCount = int(random(4, 7));   // 4 to 6
+  labCount = int(random(2, 5));     // 2 to 4
+  totalRows = staffCount + labCount;
+
+  staffNames = new String[totalRows];
+  staffRoles = new String[totalRows];
+  staffQualifications = new String[totalRows];
+  staffSemesterTags = new String[totalRows];
+
+  staffAttendance = new char[totalRows][days];
+  staffRowPresent = new int[totalRows];
+  staffRowAbsent = new int[totalRows];
+  staffDailyPresent = new int[days];
+  staffDailyAbsent = new int[days];
+
+  for (int r = 0; r < totalRows; r++) {
+    staffNames[r] = randomName();
+    staffSemesterTags[r] = "SEM " + int(random(1, 7));
+
+    if (r < staffCount) {
+      staffRoles[r] = randomStaffRole();
+      staffQualifications[r] = randomStaffQualification();
+    } else {
+      staffRoles[r] = randomLabRole();
+      staffQualifications[r] = randomLabQualification();
+    }
+
+    for (int d = 0; d < days; d++) {
+      staffAttendance[r][d] = 'P';
+    }
+
+    int absentDays = (r < staffCount) ? int(random(5, 18)) : int(random(3, 12));
+    int placed = 0;
+    while (placed < absentDays) {
+      int d = int(random(days));
+      if (staffAttendance[r][d] != 'A') {
+        staffAttendance[r][d] = 'A';
+        placed++;
+      }
+    }
+  }
+
+  calculateStaffTotals();
+  clampStaffScroll();
+}
+
+void calculateStaffTotals() {
+  for (int r = 0; r < totalRows; r++) {
+    int p = 0;
+    int a = 0;
+    for (int d = 0; d < days; d++) {
+      if (staffAttendance[r][d] == 'A') a++;
+      else p++;
+    }
+    staffRowPresent[r] = p;
+    staffRowAbsent[r] = a;
+  }
+
+  for (int d = 0; d < days; d++) {
+    int p = 0;
+    int a = 0;
+    for (int r = 0; r < totalRows; r++) {
+      if (staffAttendance[r][d] == 'A') a++;
+      else p++;
+    }
+    staffDailyPresent[d] = p;
+    staffDailyAbsent[d] = a;
+  }
+}
+
+void drawStaffRegister() {
+  int startY = marginTop;
+
+  int nameX = marginX;
+  int roleX = nameX + nameColW;
+  int qualX = roleX + roleColW;
+  int semX = qualX + qualColW;
+  int dateStartX = semX + semColW;
+
+  int tallyX1 = dateStartX + days * colW + 30;
+  int tallyX2 = tallyX1 + tallyColW + 18;
+
+  int rowStartY = startY + headerH;
+  int summaryY = rowStartY + totalRows * rowH + 80;
+
+  int contentWidth = tallyX2 + tallyColW + 70;
+  int contentHeight = summaryY + summaryBoxH + 120;
+
+  minScrollX2 = min(0, width - contentWidth);
+  minScrollY2 = min(0, height - contentHeight);
+  clampStaffScroll();
+
+  // Header
+  fill(235);
+  stroke(0);
+  strokeWeight(1);
+
+  rect(nameX, startY, nameColW, headerH);
+  rect(roleX, startY, roleColW, headerH);
+  rect(qualX, startY, qualColW, headerH);
+  rect(semX, startY, semColW, headerH);
+
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW;
+    rect(x, startY, colW, headerH);
+  }
+
+  rect(tallyX1, startY, tallyColW, headerH);
+  rect(tallyX2, startY, tallyColW, headerH);
+
+  fill(0);
+  textSize(12);
+  textAlign(CENTER, CENTER);
+  text("NAME", nameX + nameColW / 2, startY + headerH / 2);
+  text("ROLE", roleX + roleColW / 2, startY + headerH / 2);
+  text("QUALIFICATION", qualX + qualColW / 2, startY + headerH / 2);
+  text("SEM", semX + semColW / 2, startY + headerH / 2);
+  text("ABSENT", tallyX1 + tallyColW / 2, startY + headerH / 2);
+  text("PRESENT", tallyX2 + tallyColW / 2, startY + headerH / 2);
+
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW + colW / 2;
+    pushMatrix();
+    translate(x, startY + headerH / 2);
+    rotate(-HALF_PI);
+    fill(0);
+    textSize(10);
+    text(dateLabels[d], 0, 0);
+    popMatrix();
+  }
+
+  // Rows
+  textSize(11);
+  for (int r = 0; r < totalRows; r++) {
+    int y = rowStartY + r * rowH;
+
+    fill((r % 2 == 0) ? 252 : 246);
+    stroke(200);
+    rect(nameX, y, nameColW, rowH);
+    rect(roleX, y, roleColW, rowH);
+    rect(qualX, y, qualColW, rowH);
+    rect(semX, y, semColW, rowH);
+
+    fill(0);
+    textAlign(LEFT, CENTER);
+    text(staffNames[r], nameX + 8, y + rowH / 2);
+
+    textAlign(CENTER, CENTER);
+    text(staffRoles[r], roleX + roleColW / 2, y + rowH / 2);
+    text(staffQualifications[r], qualX + qualColW / 2, y + rowH / 2);
+    text(staffSemesterTags[r], semX + semColW / 2, y + rowH / 2);
+
+    for (int d = 0; d < days; d++) {
+      int x = dateStartX + d * colW;
+
+      fill(255);
+      stroke(210);
+      rect(x, y, colW, rowH);
+
+      if (staffAttendance[r][d] == 'A') fill(220, 0, 0);
+      else fill(0, 0, 220);
+
+      textAlign(CENTER, CENTER);
+      text(staffAttendance[r][d], x + colW / 2, y + rowH / 2);
+    }
+
+    fill(220, 0, 0);
+    textAlign(CENTER, CENTER);
+    text(staffRowAbsent[r] + "/" + days, tallyX1 + tallyColW / 2, y + rowH / 2);
+
+    fill(0, 0, 220);
+    text(staffRowPresent[r] + "/" + days, tallyX2 + tallyColW / 2, y + rowH / 2);
+  }
+
+  // Daily summary
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(18);
+  text("DAILY ATTENDANCE SUMMARY", nameX, summaryY - 32);
+
+  textSize(10);
+  for (int d = 0; d < days; d++) {
+    int x = dateStartX + d * colW;
+
+    fill(250);
+    stroke(160);
+    rect(x, summaryY, colW, summaryBoxH);
+
+    fill(0);
+    textAlign(CENTER, CENTER);
+    text(dateLabels[d], x + colW / 2, summaryY + 11);
+
+    fill(0, 0, 220);
+    text("P:" + staffDailyPresent[d], x + colW / 2, summaryY + 27);
+
+    fill(220, 0, 0);
+    text("A:" + staffDailyAbsent[d], x + colW / 2, summaryY + 42);
+  }
+}
+
+void clampStaffScroll() {
+  scrollX2 = constrain(scrollX2, minScrollX2, 0);
+  scrollY2 = constrain(scrollY2, minScrollY2, 0);
+}
+
+// ------------------------------------------------------------
+// SCREEN 3: SEMESTER CALENDAR (2026)
+// ------------------------------------------------------------
+void drawSemesterCalendar() {
+  background(255);
+
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(20);
+  text("SEMESTER CALENDAR - 2026", width / 2, 90);
+
+  textSize(12);
+  fill(60);
+  text("Weekend + fixed holiday dates are marked as holidays. Edit the holiday list in code to match your college.", width / 2, 112);
+
+  int cardsLeft = marginX;
+  int cardsTop = 135;
+  int gapX = 16;
+  int gapY = 16;
+
+  int cardW = (width - 2 * marginX - gapX) / 2;
+  int cardH = (height - cardsTop - 95 - 2 * gapY) / 3;
+
+  for (int i = 0; i < semesterMonthCount; i++) {
+    int monthIndex = semesterStartMonth + i;
+    int col = i % 2;
+    int row = i / 2;
+
+    int x = cardsLeft + col * (cardW + gapX);
+    int y = cardsTop + row * (cardH + gapY);
+
+    drawMonthCard(monthIndex, x, y, cardW, cardH);
+  }
+
+  drawCalendarLegend(width - 290, height - 68);
+}
+
+void drawMonthCard(int monthIndex, int x, int y, int w, int h) {
+  fill(248);
+  stroke(0);
+  rect(x, y, w, h);
+
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(16);
+  text(monthNames[monthIndex] + " " + semesterYear, x + 12, y + 18);
+
+  textSize(10);
+  fill(80);
+  text("Working days and holidays", x + 12, y + 34);
+
+  float cellW = w / 7.0;
+  float gridTop = y + 46;
+  float cellH = (h - 72) / 6.0;
+
+  // Weekday header
+  textAlign(CENTER, CENTER);
+  textSize(10);
+  for (int d = 0; d < 7; d++) {
+    float cx = x + d * cellW;
+    fill(230);
+    stroke(180);
+    rect(cx, gridTop, cellW, 18);
+    fill(0);
+    text(weekNames[d], cx + cellW / 2, gridTop + 9);
+  }
+
+  // Days of month
+  Calendar c = new GregorianCalendar(semesterYear, monthIndex, 1);
+  int firstDow = c.get(Calendar.DAY_OF_WEEK); // Sunday=1 ... Saturday=7
+  int offset = (firstDow + 5) % 7;           // Monday=0 ... Sunday=6
+  int maxDay = c.getActualMaximum(Calendar.DAY_OF_MONTH);
+
+  int holidayCount = 0;
+  int workingCount = 0;
+
+  for (int day = 1; day <= maxDay; day++) {
+    Calendar dcal = new GregorianCalendar(semesterYear, monthIndex, day);
+    boolean holiday = isHoliday(dcal);
+
+    if (holiday) holidayCount++;
+    else workingCount++;
+
+    int index = offset + day - 1;
+    int col = index % 7;
+    int row = index / 7;
+
+    float cx = x + col * cellW;
+    float cy = gridTop + 18 + row * cellH;
+
+    if (holiday) fill(255, 235, 235);
+    else fill(250);
+
+    stroke(200);
+    rect(cx, cy, cellW, cellH);
+
+    fill(0);
+    textAlign(LEFT, TOP);
+    textSize(11);
+    text(day, cx + 4, cy + 2);
+
+    textAlign(CENTER, CENTER);
+    textSize(9);
+
+    if (holiday) fill(210, 0, 0);
+    else fill(0, 0, 220);
+
+    text(holiday ? "H" : "W", cx + cellW / 2, cy + cellH / 2 + 5);
+  }
+
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(11);
+  text("Working Days : " + workingCount, x + 12, y + h - 14);
+  text("Holidays : " + holidayCount, x + w - 110, y + h - 14);
+}
+
+boolean isHoliday(Calendar c) {
+  int dow = c.get(Calendar.DAY_OF_WEEK);
+  if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) return true;
+
+  String key = dateKey(c);
+  for (int i = 0; i < fixedHolidayDates.length; i++) {
+    if (fixedHolidayDates[i].equals(key)) return true;
+  }
+  return false;
+}
+
+String dateKey(Calendar c) {
+  int dd = c.get(Calendar.DAY_OF_MONTH);
+  int mm = c.get(Calendar.MONTH) + 1;
+  int yy = c.get(Calendar.YEAR);
+  return nf(dd, 2) + "/" + nf(mm, 2) + "/" + yy;
+}
+
+void drawCalendarLegend(int x, int y) {
+  fill(255);
+  stroke(0);
+  rect(x, y, 270, 42);
+
+  fill(255, 235, 235);
+  rect(x + 10, y + 10, 16, 16);
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(11);
+  text("Holiday", x + 32, y + 18);
+
+  fill(250);
+  rect(x + 110, y + 10, 16, 16);
+  fill(0);
+  text("Working day", x + 132, y + 18);
+
+  fill(0);
+  textAlign(LEFT, CENTER);
+  text("W = working, H = holiday", x + 10, y + 31);
+}
+
+// ------------------------------------------------------------
+// SCREEN 4: SEMESTER TIMETABLE
+// ------------------------------------------------------------
+void drawSemesterTimeTable() {
+  background(255);
+
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(20);
+  text("SEMESTER TIME TABLE - 2026", width / 2, 88);
+
+  textSize(12);
+  fill(70);
+  text("Use this as your editable timetable. Replace subjects in the semesterTT array as needed.", width / 2, 110);
+
+  int tableX = marginX;
+  int tableY = 140;
+  int tableW = width - 2 * marginX;
+  int leftColW = 170;
+  int dayColW = (tableW - leftColW) / ttDays.length;
+  int rowH2 = 56;
+
+  // Header row
+  fill(235);
+  stroke(0);
+  rect(tableX, tableY, leftColW, rowH2);
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  text("PERIOD / TIME", tableX + leftColW / 2, tableY + rowH2 / 2);
+
+  for (int d = 0; d < ttDays.length; d++) {
+    int x = tableX + leftColW + d * dayColW;
+    fill(235);
+    stroke(0);
+    rect(x, tableY, dayColW, rowH2);
+    fill(0);
+    text(ttDays[d], x + dayColW / 2, tableY + rowH2 / 2);
+  }
+
+  // Body
+  int bodyY = tableY + rowH2;
+  for (int p = 0; p < ttPeriods.length; p++) {
+    int y = bodyY + p * rowH2;
+
+    fill(245);
+    stroke(0);
+    rect(tableX, y, leftColW, rowH2);
+
+    fill(0);
+    textAlign(CENTER, CENTER);
+    text(ttPeriods[p], tableX + leftColW / 2, y + rowH2 / 2);
+
+    for (int d = 0; d < ttDays.length; d++) {
+      int x = tableX + leftColW + d * dayColW;
+
+      fill(250);
+      stroke(180);
+      rect(x, y, dayColW, rowH2);
+
+      fill(0);
+      textAlign(CENTER, CENTER);
+      textSize(11);
+      text(semesterTT[p][d], x + dayColW / 2, y + rowH2 / 2);
+    }
+  }
+
+  // Note box
+  int noteY = bodyY + ttPeriods.length * rowH2 + 18;
+  fill(250);
+  stroke(0);
+  rect(tableX, noteY, tableW, 70);
+
+  fill(0);
+  textAlign(LEFT, TOP);
+  textSize(12);
+  text("Notes:", tableX + 12, noteY + 10);
+  text("• Lunch / break can be placed between periods 2 and 3.\n• Lab slots can be changed to full-day sessions.\n• Edit the semesterTT array to match the actual timetable.", tableX + 12, noteY + 28);
+}
+
+// ------------------------------------------------------------
+// SCREEN 5: ADJUSTMENT / STAFF ACCOUNT
+// ------------------------------------------------------------
+void drawAdjustmentScreen() {
+  background(255);
+
+  int startY = marginTop;
+  int x = marginX;
+  int tableW = width - 2 * marginX;
+
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(20);
+  text("STAFF ADJUSTMENT / ACCOUNT", width / 2, 88);
+
+  textSize(12);
+  fill(70);
+  text("This screen lists all staff and lab members with serial number, name, role, qualification, and attendance account.", width / 2, 110);
+
+  // Summary cards
+  int cardY = startY - 5;
+  int cardH = 44;
+  int cardGap = 12;
+  int cardW = (tableW - 3 * cardGap) / 4;
+
+  drawSummaryCard(x, cardY, cardW, cardH, "STAFF", str(staffCount));
+  drawSummaryCard(x + cardW + cardGap, cardY, cardW, cardH, "LAB", str(labCount));
+  drawSummaryCard(x + 2 * (cardW + cardGap), cardY, cardW, cardH, "TOTAL", str(totalRows));
+  drawSummaryCard(x + 3 * (cardW + cardGap), cardY, cardW, cardH, "DAYS", str(days));
+
+  int tableTop = startY + 55;
+  int snoW = 70;
+  int nameW = 250;
+  int roleW = 170;
+  int qualW = 150;
+  int semW = 90;
+  int absW = 100;
+  int presW = 100;
+
+  // Header row
+  int rowH3 = 32;
+  int tx = x;
+
+  fill(235);
+  stroke(0);
+  rect(tx, tableTop, snoW, rowH3);
+  rect(tx + snoW, tableTop, nameW, rowH3);
+  rect(tx + snoW + nameW, tableTop, roleW, rowH3);
+  rect(tx + snoW + nameW + roleW, tableTop, qualW, rowH3);
+  rect(tx + snoW + nameW + roleW + qualW, tableTop, semW, rowH3);
+  rect(tx + snoW + nameW + roleW + qualW + semW, tableTop, absW, rowH3);
+  rect(tx + snoW + nameW + roleW + qualW + semW + absW, tableTop, presW, rowH3);
+
+  fill(0);
+  textAlign(CENTER, CENTER);
+  textSize(11);
+  text("S.NO", tx + snoW / 2, tableTop + rowH3 / 2);
+  text("NAME", tx + snoW + nameW / 2, tableTop + rowH3 / 2);
+  text("ROLE", tx + snoW + nameW + roleW / 2, tableTop + rowH3 / 2);
+  text("QUALIFICATION", tx + snoW + nameW + roleW + qualW / 2, tableTop + rowH3 / 2);
+  text("SEM", tx + snoW + nameW + roleW + qualW + semW / 2, tableTop + rowH3 / 2);
+  text("ABSENT", tx + snoW + nameW + roleW + qualW + semW + absW / 2, tableTop + rowH3 / 2);
+  text("PRESENT", tx + snoW + nameW + roleW + qualW + semW + absW + presW / 2, tableTop + rowH3 / 2);
+
+  // Rows
+  int rY = tableTop + rowH3;
+  int rowH5 = 30;
+
+  for (int r = 0; r < totalRows; r++) {
+    int y = rY + r * rowH5;
+
+    if (r % 2 == 0) fill(252);
+    else fill(246);
+
+    stroke(190);
+    rect(tx, y, snoW, rowH5);
+    rect(tx + snoW, y, nameW, rowH5);
+    rect(tx + snoW + nameW, y, roleW, rowH5);
+    rect(tx + snoW + nameW + roleW, y, qualW, rowH5);
+    rect(tx + snoW + nameW + roleW + qualW, y, semW, rowH5);
+    rect(tx + snoW + nameW + roleW + qualW + semW, y, absW, rowH5);
+    rect(tx + snoW + nameW + roleW + qualW + semW + absW, y, presW, rowH5);
+
+    fill(0);
+    textAlign(CENTER, CENTER);
+    textSize(11);
+    text((r + 1), tx + snoW / 2, y + rowH5 / 2);
+    text(staffNames[r], tx + snoW + nameW / 2, y + rowH5 / 2);
+    text(staffRoles[r], tx + snoW + nameW + roleW / 2, y + rowH5 / 2);
+    text(staffQualifications[r], tx + snoW + nameW + roleW + qualW / 2, y + rowH5 / 2);
+    text(staffSemesterTags[r], tx + snoW + nameW + roleW + qualW + semW / 2, y + rowH5 / 2);
+    text(staffRowAbsent[r], tx + snoW + nameW + roleW + qualW + semW + absW / 2, y + rowH5 / 2);
+    text(staffRowPresent[r], tx + snoW + nameW + roleW + qualW + semW + absW + presW / 2, y + rowH5 / 2);
+  }
+
+  // Bottom note
+  int noteY = rY + totalRows * rowH5 + 18;
+  fill(250);
+  stroke(0);
+  rect(x, noteY, tableW, 60);
+
+  fill(0);
+  textAlign(LEFT, TOP);
+  textSize(12);
+  text("Adjustment Note:\nUse this screen for checking staff/lab attendance account and editing the staff list.", x + 12, noteY + 10);
+}
+
+void drawSummaryCard(int x, int y, int w, int h, String title, String value) {
+  fill(245);
+  stroke(0);
+  rect(x, y, w, h);
+
+  fill(60);
+  textAlign(LEFT, CENTER);
+  textSize(11);
+  text(title, x + 10, y + 13);
+
+  fill(0);
+  textAlign(LEFT, CENTER);
+  textSize(16);
+  text(value, x + 10, y + 30);
+}
+
+// ------------------------------------------------------------
+// HELPERS
+// ------------------------------------------------------------
+String randomName() {
+  String[] first = {
+    "Arun", "Karthik", "Vijay", "Ajith", "Ravi", "Prakash", "Dinesh", "Suresh",
+    "Manoj", "Hari", "Deepak", "Saravanan", "Kumar", "Bala", "Ramesh", "Gokul",
+    "Naveen", "Pravin", "Sathish", "Ashok"
+  };
+
+  String[] last = {
+    "Kumar", "Raj", "Vel", "Selvan", "Nathan", "Murugan", "Prasad", "Babu",
+    "Mohan", "Krishnan", "Raja", "Pandian", "Shankar", "Reddy", "Das"
+  };
+
+  return first[int(random(first.length))] + " " + last[int(random(last.length))];
+}
+
+String randomStaffRole() {
+  String[] rolesList = { "Professor", "Asst. Professor", "Sr. Lecturer", "Lecturer", "HOD", "Tutor" };
+  return rolesList[int(random(rolesList.length))];
+}
+
+String randomLabRole() {
+  String[] rolesList = { "Lab Instructor", "Sr. Lab Instructor", "Lab Assistant", "Technical Staff" };
+  return rolesList[int(random(rolesList.length))];
+}
+
+String randomStaffQualification() {
+  String[] q = { "B.E", "B.Tech", "M.E", "M.Tech", "Ph.D", "M.Sc" };
+  return q[int(random(q.length))];
+}
+
+String randomLabQualification() {
+  String[] q = { "Diploma", "B.Sc", "BCA", "B.E", "M.Sc", "MCA" };
+  return q[int(random(q.length))];
+}
+
+// ------------------------------------------------------------
+// INPUT
+// ------------------------------------------------------------
+void mousePressed() {
+  int tabW = (width - 2 * marginX - 4 * tabGap) / 5;
+
+  // Click tabs
+  if (mouseY >= tabY && mouseY <= tabY + tabH) {
+    for (int i = 0; i < 5; i++) {
+      int x = marginX + i * (tabW + tabGap);
+      if (mouseX >= x && mouseX <= x + tabW) {
+        screen = i + 1;
+        return;
+      }
+    }
+  }
+
+  // Start drag
+  if (screen == 1) {
+    lastX1 = mouseX;
+    lastY1 = mouseY;
+  } else if (screen == 2) {
+    lastX2 = mouseX;
+    lastY2 = mouseY;
+  } else if (screen == 5) {
+    lastX5 = mouseX;
+    lastY5 = mouseY;
+  }
+}
+
+void mouseDragged() {
+  if (mouseY < 80) return;
+
+  if (screen == 1) {
+    scrollX1 += mouseX - lastX1;
+    scrollY1 += mouseY - lastY1;
+    clampStudentScroll();
+    lastX1 = mouseX;
+    lastY1 = mouseY;
+  } else if (screen == 2) {
+    scrollX2 += mouseX - lastX2;
+    scrollY2 += mouseY - lastY2;
+    clampStaffScroll();
+    lastX2 = mouseX;
+    lastY2 = mouseY;
+  } else if (screen == 5) {
+    scrollX5 += mouseX - lastX5;
+    scrollY5 += mouseY - lastY5;
+    clampAdjustmentScroll();
+    lastX5 = mouseX;
+    lastY5 = mouseY;
+  }
+}
+
+void clampAdjustmentScroll() {
+  // Screen 5 is usually small, but scroll is available if you expand the table later.
+  scrollX5 = constrain(scrollX5, minScrollX5, 0);
+  scrollY5 = constrain(scrollY5, minScrollY5, 0);
+}
+
+void keyPressed() {
+  if (key == 'r' || key == 'R') {
+    generateStudentData();
+    generateStaffData();
+  }
+
+  if (key == '1') screen = 1;
+  if (key == '2') screen = 2;
+  if (key == '3') screen = 3;
+  if (key == '4') screen = 4;
+  if (key == '5') screen = 5;
+}
