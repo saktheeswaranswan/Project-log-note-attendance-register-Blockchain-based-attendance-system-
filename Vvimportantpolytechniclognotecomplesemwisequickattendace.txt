@@ -1,0 +1,1116 @@
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+
+// ------------------------------------------------------------
+// GLOBAL ENGINE CONFIGURATION & STATE
+// ------------------------------------------------------------
+int screen = 1;       // 1=Students, 2=Staff, 3=Calendar, 4=Timetable, 5=Adjustment
+int selectedSem = 1;  // 1 to 6 (DME Semesters)
+
+int days = 100;
+int rowH = 35;
+int colW = 32;
+
+int marginX = 20;
+int marginTop = 150; // Extra room for Global Semester Selector
+int headerH = 46;
+
+int nameColW = 190;
+int roleColW = 120;
+int subjColW = 160;
+int tallyColW = 70;
+
+String[] dateLabels = new String[days];
+boolean[] isHoliday = new boolean[days];
+
+// ------------------------------------------------------------
+// SCREEN 1: ADVANCED STUDENT SYSTEM
+// ------------------------------------------------------------
+int students = 40; // Per-semester slice
+String[][] studentNames = new String[6][students];
+char[][][] studentAttendance = new char[6][students][days];
+int[][] studentRowPresent = new int[6][students];
+int[][] studentRowAbsent = new int[6][students];
+int[][] studentRowMedical = new int[6][students];
+
+int maxMedicalLeave = 5;
+boolean medicalMode = false;
+boolean holidayMarkMode = false; // Toggle for Calendar Screen
+
+// Fast Assign Navigation State
+boolean showingStudentDetail = false;
+int selectedStudent = -1;
+int selectedDayIndex = 0; 
+
+float scrollX1 = 0, scrollY1 = 0;
+float lastX, lastY;
+float minScrollX1 = 0, minScrollY1 = 0;
+
+// ------------------------------------------------------------
+// SCREEN 2 & 5: STAFF METRICS & ENGINE POOL
+// ------------------------------------------------------------
+int totalStaff = 18; // 3 core instructors allocated per semester tier
+String[] staffNames = new String[totalStaff];
+String[] staffRoles = new String[totalStaff];
+String[] staffSubjects = new String[totalStaff];
+int[] staffTargetSem = new int[totalStaff];
+
+char[][] staffAttendance = new char[totalStaff][days];
+int[] staffHoursWeekly = new int[totalStaff];
+int[] staffHoursSemester = new int[totalStaff];
+int[] staffAbsences = new int[totalStaff];
+
+float scrollX2 = 0, scrollY2 = 0;
+float minScrollX2 = 0, minScrollY2 = 0;
+float scrollX5 = 0, scrollY5 = 0;
+float minScrollX5 = 0, minScrollY5 = 0;
+
+// ------------------------------------------------------------
+// SCREEN 3: SEMESTER CALENDAR TRACKING
+// ------------------------------------------------------------
+int semesterYear = 2026;
+String[] monthNames = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", 
+                        "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
+String[] weekNames = { "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN" };
+
+// ------------------------------------------------------------
+// SCREEN 4: DOTE POLYTECHNIC DME TIMETABLE MATRIX
+// ------------------------------------------------------------
+String[] ttDays = { "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+String[] ttPeriods = { "P1 (09:00)", "P2 (09:50)", "P3 (11:00)", "P4 (11:50)", "P5 (13:30)", "P6 (14:20)", "P7 (15:10)" };
+
+// Canonical 6-Semester DOTE Diploma in Mechanical Engineering Curriculum Matrix
+String[][][] DME_Timetable = {
+  // SEMESTER 1
+  {
+    { "Comm. English I", "Engineering Math I", "Engineering Physics I", "Engineering Chem I", "Engg. Graphics I", "Innovation Lab", "Library" },
+    { "Engineering Math I", "Engineering Physics I", "Engineering Chem I", "Comm. English I", "Basic Workshop", "Basic Workshop", "Sports" },
+    { "Engineering Physics I", "Engineering Math I", "Engg. Graphics I", "Engg. Graphics I", "Engineering Chem I", "Innovation Lab", "Seminar" },
+    { "Engineering Chem I", "Comm. English I", "Engineering Math I", "Engineering Physics I", "Basic Workshop", "Basic Workshop", "Mentoring" },
+    { "Engg. Graphics I", "Engg. Graphics I", "Comm. English I", "Engineering Math I", "Physics Lab", "Physics Lab", "Library" },
+    { "Chemistry Lab", "Chemistry Lab", "Engineering Physics I", "Engineering Chem I", "Engineering Math I", "Revision", "Test" }
+  },
+  // SEMESTER 2
+  {
+    { "Comm. English II", "Engineering Math II", "Engineering Physics II", "Engineering Chem II", "Engg. Graphics II", "Workshop II", "Sports" },
+    { "Engineering Math II", "Engineering Physics II", "Engineering Chem II", "Comm. English II", "Physics Lab II", "Physics Lab II", "Library" },
+    { "Engineering Physics II", "Engineering Math II", "Engg. Graphics II", "Engg. Graphics II", "Engineering Chem II", "Workshop II", "Seminar" },
+    { "Engineering Chem II", "Comm. English II", "Engineering Math II", "Engineering Physics II", "Chemistry Lab II", "Chemistry Lab II", "Mentoring" },
+    { "Engg. Graphics II", "Engg. Graphics II", "Comm. English II", "Engineering Math II", "Workshop II", "Workshop II", "Library" },
+    { "Workshop II", "Workshop II", "Engineering Physics II", "Engineering Chem II", "Engineering Math II", "Revision", "Test" }
+  },
+  // SEMESTER 3
+  {
+    { "Strength of Materials", "Fluid Mechanics", "Manufacturing Proc", "Machine Drawing", "Comp. Applic. Lab", "Comp. Applic. Lab", "Library" },
+    { "Fluid Mechanics", "Manufacturing Proc", "Strength of Materials", "Machine Drawing", "Strength of Mat. Lab", "Strength of Mat. Lab", "Sports" },
+    { "Manufacturing Proc", "Strength of Materials", "Fluid Mechanics", "Machine Drawing", "Fluid Power Lab", "Fluid Power Lab", "Seminar" },
+    { "Machine Drawing", "Machine Drawing", "Strength of Materials", "Fluid Mechanics", "Manufacturing Proc", "Tutorial", "Mentoring" },
+    { "Comp. Applic. Lab", "Comp. Applic. Lab", "Manufacturing Proc", "Strength of Materials", "Fluid Mechanics", "Library", "Quiz" },
+    { "Strength of Mat. Lab", "Strength of Mat. Lab", "Fluid Power Lab", "Fluid Power Lab", "Revision", "Revision", "Test" }
+  },
+  // SEMESTER 4
+  {
+    { "Thermal Engg I", "Mfg. Technology I", "Fluid Power Auto", "Metrology & QC", "Machine Shop I", "Machine Shop I", "Library" },
+    { "Mfg. Technology I", "Fluid Power Auto", "Thermal Engg I", "Metrology & QC", "Metrology Lab", "Metrology Lab", "Sports" },
+    { "Fluid Power Auto", "Thermal Engg I", "Mfg. Technology I", "Metrology & QC", "Fluid Power Auto Lab", "Fluid Power Auto Lab", "Seminar" },
+    { "Metrology & QC", "Thermal Engg I", "Mfg. Technology I", "Fluid Power Auto", "Machine Shop I", "Machine Shop I", "Mentoring" },
+    { "Machine Shop I", "Machine Shop I", "Metrology Lab", "Metrology Lab", "Thermal Engg I", "Library", "Tutorial" },
+    { "Fluid Power Auto Lab", "Fluid Power Auto Lab", "Mfg. Technology I", "Fluid Power Auto", "Metrology & QC", "Revision", "Test" }
+  },
+  // SEMESTER 5
+  {
+    { "Thermal Engg II", "Design of Mach Elem", "Mechatronics", "CAD/CAM", "Machine Shop II", "Machine Shop II", "Library" },
+    { "Design of Mach Elem", "Mechatronics", "Thermal Engg II", "CAD/CAM", "CAD/CAM Lab", "CAD/CAM Lab", "Sports" },
+    { "Mechatronics", "Thermal Engg II", "Design of Mach Elem", "CAD/CAM", "Mechatronics Lab", "Mechatronics Lab", "Seminar" },
+    { "CAD/CAM", "Design of Mach Elem", "Thermal Engg II", "Mechatronics", "Machine Shop II", "Machine Shop II", "Mentoring" },
+    { "Machine Shop II", "Machine Shop II", "Mechatronics Lab", "Mechatronics Lab", "Life Skills Lab", "Life Skills Lab", "Library" },
+    { "CAD/CAM Lab", "CAD/CAM Lab", "Thermal Engg II", "Design of Mach Elem", "Mechatronics", "Revision", "Test" }
+  },
+  // SEMESTER 6
+  {
+    { "Ind. Engg & Mgmt", "CIM", "Automobile Engg", "Renewable Energy", "Simulation Lab", "Simulation Lab", "Project Work" },
+    { "CIM", "Automobile Engg", "Ind. Engg & Mgmt", "Renewable Energy", "Project Work", "Project Work", "Sports" },
+    { "Automobile Engg", "Ind. Engg & Mgmt", "CIM", "Renewable Energy", "Auto Engg Lab", "Auto Engg Lab", "Project Work" },
+    { "Renewable Energy", "CIM", "Automobile Engg", "Ind. Engg & Mgmt", "Simulation Lab", "Simulation Lab", "Mentoring" },
+    { "Simulation Lab", "Simulation Lab", "Auto Engg Lab", "Auto Engg Lab", "CIM Lab", "CIM Lab", "Project Work" },
+    { "Project Work", "Project Work", "Project Work", "Project Work", "Project Work", "Revision", "Test" }
+  }
+};
+
+// State trackers for manual timetable overrides
+boolean borrowMode = false;
+int clickState = 0; // 0=none selected, 1=source selected
+int sourceP = -1, sourceD = -1;
+
+// ------------------------------------------------------------
+// SETUP ENGINE ENTRYPOINT
+// ------------------------------------------------------------
+void setup() {
+  fullScreen();
+  smooth(4);
+  rectMode(CORNER);
+  textAlign(CENTER, CENTER);
+  
+  initializeDateLabels();
+  generateStaticStaffPool();
+  generateInitialStudentData();
+  recalculateSystemMetrics();
+}
+
+// ------------------------------------------------------------
+// MAIN LOOP RENDER
+// ------------------------------------------------------------
+void draw() {
+  background(255);
+
+  if (screen == 1) {
+    if (showingStudentDetail) {
+      drawStudentDetailView();
+    } else {
+      pushMatrix(); translate(scrollX1, scrollY1); drawStudentRegisterGrid(); popMatrix();
+    }
+  } else if (screen == 2) {
+    pushMatrix(); translate(scrollX2, scrollY2); drawStaffRegisterGrid(); popMatrix();
+  } else if (screen == 3) {
+    drawSemesterCalendarView();
+  } else if (screen == 4) {
+    drawDME_TimetableScreen();
+  } else if (screen == 5) {
+    pushMatrix(); translate(scrollX5, scrollY5); drawAdjustmentAccountingScreen(); popMatrix();
+  }
+
+  drawMasterTopBarUI();
+}
+
+// ------------------------------------------------------------
+// INITIALIZATION SUBSYSTEMS
+// ------------------------------------------------------------
+void initializeDateLabels() {
+  Calendar cal = Calendar.getInstance();
+  cal.set(2026, 5, 1); // Academic Term Opens: June 1, 2026
+  
+  for (int i = 0; i < days; i++) {
+    Calendar instance = (Calendar) cal.clone();
+    instance.add(Calendar.DAY_OF_YEAR, i);
+    dateLabels[i] = nf(instance.get(Calendar.DAY_OF_MONTH), 2) + "/" + nf(instance.get(Calendar.MONTH) + 1, 2);
+    
+    // Auto-populate weekends as structural holidays
+    int dayOfWeek = instance.get(Calendar.DAY_OF_WEEK);
+    if (dayOfWeek == Calendar.SUNDAY) {
+      isHoliday[i] = true;
+    } else {
+      isHoliday[i] = false;
+    }
+  }
+}
+
+void generateStaticStaffPool() {
+  String[] names = {
+    "Dr. Arul Mozhi", "Prof. K. Rajan", "Dr. M. Selvam",
+    "Prof. V. Thagar", "Dr. S. Meenakshi", "Prof. R. Balu",
+    "Dr. G. Pandian", "Prof. T. Hari", "Dr. A. Anand",
+    "Prof. C. Ramesh", "Dr. P. Kumar", "Prof. M. Vivek",
+    "Dr. K. Senthil", "Prof. J. Ram", "Dr. S. Chitra",
+    "Prof. P. Devi", "Dr. N. Mani", "Prof. K. Siva"
+  };
+  
+  String[] designations = { "HOD / Professor", "Assistant Professor", "Lecturer" };
+
+  for (int i = 0; i < totalStaff; i++) {
+    staffNames[i] = names[i];
+    staffRoles[i] = designations[i % 3];
+    staffTargetSem[i] = (i / 3) + 1; // Map 3 staff members per semester tier evenly
+    
+    // Assign core DOTE domain specialization matching their allocated target semester
+    int semIndex = staffTargetSem[i] - 1;
+    staffSubjects[i] = DME_Timetable[semIndex][0][i % 3]; 
+    
+    for (int d = 0; d < days; d++) {
+      staffAttendance[i][d] = 'P';
+    }
+    // Seed initial test data variances
+    if (i % 2 == 0) staffAttendance[i][12] = 'A';
+    if (i % 3 == 0) staffAttendance[i][24] = 'A';
+  }
+}
+
+void generateInitialStudentData() {
+  String[] fNames = {"Arun", "Karthik", "Vijay", "Ajith", "Manoj", "Hari", "Bala", "Ramesh", "Sanjay", "Siva"};
+  String[] lNames = {"Kumar", "Raj", "Selvan", "Nathan", "Murugan", "Prasad", "Babu", "Das", "Prakash", "Velas"};
+  
+  for (int sem = 0; sem < 6; sem++) {
+    for (int s = 0; s < students; s++) {
+      studentNames[sem][s] = fNames[(s + sem) % fNames.length] + " " + lNames[(s * 2 + sem) % lNames.length] + " (R-" + nf(s+1, 2) + ")";
+      for (int d = 0; d < days; d++) {
+        studentAttendance[sem][s][d] = 'P';
+      }
+      // Inject deterministic historical absent clusters
+      int seedAbsences = (s % 4 == 0) ? 5 : 2;
+      for (int a = 0; a < seedAbsences; a++) {
+        int targetDay = (s * 7 + a * 13) % days;
+        studentAttendance[sem][s][targetDay] = 'A';
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// ALGORITHMIC COMPILATION ENGINE (THE CORE OPTIMIZER)
+// ------------------------------------------------------------
+void recalculateSystemMetrics() {
+  // 1. Process Student Attendance Metrics
+  for (int sem = 0; sem < 6; sem++) {
+    for (int s = 0; s < students; s++) {
+      int p = 0, a = 0, m = 0;
+      for (int d = 0; d < days; d++) {
+        if (isHoliday[d]) {
+          studentAttendance[sem][s][d] = 'H';
+          continue;
+        } else if (studentAttendance[sem][s][d] == 'H' || studentAttendance[sem][s][d] == 0) {
+          studentAttendance[sem][s][d] = 'P'; 
+        }
+        
+        char status = studentAttendance[sem][s][d];
+        if (status == 'A') a++;
+        else if (status == 'M') m++;
+        else p++;
+      }
+      studentRowPresent[sem][s] = p;
+      studentRowAbsent[sem][s] = a;
+      studentRowMedical[sem][s] = m;
+    }
+  }
+
+  // 2. Clear and Reinitialize Staff Allocation Buckets
+  for (int i = 0; i < totalStaff; i++) {
+    staffHoursWeekly[i] = 0;
+    staffHoursSemester[i] = 0;
+    staffAbsences[i] = 0;
+    
+    for (int d = 0; d < days; d++) {
+      if (isHoliday[d]) {
+        staffAttendance[i][d] = 'H';
+      } else if (staffAttendance[i][d] == 'H') {
+        staffAttendance[i][d] = 'P';
+      }
+      if (staffAttendance[i][d] == 'A') {
+        staffAbsences[i]++;
+      }
+    }
+  }
+
+  // 3. Run Dynamic Dynamic Allocation and Substitution Loop
+  for (int d = 0; d < days; d++) {
+    if (isHoliday[d]) continue;
+    
+    int currentDayOfWeek = d % 6; // Mapping days to working week structures (Mon-Sat)
+    
+    for (int semIter = 1; semIter <= 6; semIter++) {
+      for (int p = 0; p < 7; p++) {
+        String subject = DME_Timetable[semIter-1][currentDayOfWeek][p];
+        
+        // Find primary staff candidate assigned to this subject domain
+        int primaryStaffId = -1;
+        for (int i = 0; i < totalStaff; i++) {
+          if (staffTargetSem[i] == semIter && staffSubjects[i].equals(subject)) {
+            primaryStaffId = i;
+            break;
+          }
+        }
+        
+        // Fallback context: handle baseline matching if subject mapping is unassigned
+        if (primaryStaffId == -1) {
+          for (int i = 0; i < totalStaff; i++) {
+            if (staffTargetSem[i] == semIter) {
+              primaryStaffId = i;
+              break;
+            }
+          }
+        }
+        
+        // Assess active availability of primary instructor
+        if (primaryStaffId != -1 && staffAttendance[primaryStaffId][d] == 'P') {
+          staffHoursSemester[primaryStaffId]++;
+          if (d < 6) staffHoursWeekly[primaryStaffId]++; // First tracking week proxy window
+        } 
+        else {
+          // INTERVENTION ENGINE: Instructor is absent or unassigned.
+          int fallbackStaffId = -1;
+          int minimumAccumulatedHours = Integer.MAX_VALUE;
+          
+          for (int i = 0; i < totalStaff; i++) {
+            if (staffTargetSem[i] == semIter && staffAttendance[i][d] == 'P') {
+              if (staffHoursSemester[i] < minimumAccumulatedHours) {
+                minimumAccumulatedHours = staffHoursSemester[i];
+                fallbackStaffId = i;
+              }
+            }
+          }
+          
+          // Secondary search radius optimization across boundaries if local tier is exhausted
+          if (fallbackStaffId == -1) {
+            for (int i = 0; i < totalStaff; i++) {
+              if (staffAttendance[i][d] == 'P') {
+                if (staffHoursSemester[i] < minimumAccumulatedHours) {
+                  minimumAccumulatedHours = staffHoursSemester[i];
+                  fallbackStaffId = i;
+                }
+              }
+            }
+          }
+          
+          if (fallbackStaffId != -1) {
+            staffHoursSemester[fallbackStaffId]++;
+            if (d < 6) staffHoursWeekly[fallbackStaffId]++;
+          }
+        }
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// INTERFACE: TOP NAVIGATION BAR COMPONENT
+// ------------------------------------------------------------
+void drawMasterTopBarUI() {
+  fill(255); noStroke();
+  rect(0, 0, width, marginTop - 5);
+  
+  // Boundary Frame
+  stroke(180); strokeWeight(1);
+  line(0, marginTop - 5, width, marginTop - 5);
+  
+  // Title Header
+  fill(20, 40, 80); textAlign(LEFT, CENTER); textSize(22); textFont(createFont("Arial Bold", 22));
+  text("DOTE POLYTECHNIC DME MANAGEMENT SYSTEM", marginX, 35);
+  
+  // Tab Controller Configurations
+  int tabW = 160;
+  int tabH = 36;
+  int tabY = 18;
+  String[] tabNames = { "STUDENTS", "STAFF REGISTER", "CALENDAR", "TIMETABLE MAT", "ADJUSTMENT ACC" };
+  
+  for (int i = 0; i < 5; i++) {
+    int x = width - (5 - i) * (tabW + 10) - marginX;
+    fill(screen == i + 1 ? color(0, 102, 204) : color(240));
+    stroke(140);
+    rect(x, tabY, tabW, tabH, 4);
+    fill(screen == i + 1 ? 255 : 60);
+    textSize(12); textAlign(CENTER, CENTER);
+    text(tabNames[i], x + tabW / 2, tabY + tabH / 2);
+  }
+  
+  // Active Academic Tier Selector (Semesters 1-6 Controller Linkage)
+  int semBtnW = 140;
+  int semBtnH = 32;
+  int semBtnY = 75;
+  
+  fill(70); textAlign(LEFT, CENTER); textSize(13);
+  text("ACTIVE DME SEMESTER SELECTOR:", marginX, semBtnY + semBtnH / 2);
+  
+  for (int i = 1; i <= 6; i++) {
+    int x = 250 + (i - 1) * (semBtnW + 8);
+    fill(selectedSem == i ? color(0, 153, 76) : color(245));
+    stroke(160);
+    rect(x, semBtnY, semBtnW, semBtnH, 4);
+    fill(selectedSem == i ? 255 : 50);
+    textSize(12); textAlign(CENTER, CENTER);
+    text("SEMESTER " + i, x + semBtnW / 2, semBtnY + semBtnH / 2);
+  }
+  
+  // Context Toolbars Render
+  int toolBarY = 115;
+  fill(100); textAlign(LEFT, CENTER); textSize(12);
+  
+  if (screen == 1) {
+    if (showingStudentDetail) {
+      text("RAPID KEYPAD MODE: Focus cell via Mouse/Arrows. Mutate states via keyboard: [P]=Present, [A]=Absent, [M]=Medical. System auto-calculates records.", marginX, toolBarY);
+    } else {
+      fill(medicalMode ? color(204, 0, 0) : color(230)); stroke(100); rect(marginX, toolBarY - 10, 170, 26, 4);
+      fill(medicalMode ? 255 : 0); text("MEDICAL TOGGLE: " + (medicalMode ? "ON" : "OFF"), marginX + 12, toolBarY + 3);
+      fill(100); text("Interaction Matrix: Click a Student Name profile to trigger the rapid entry editor grid.", marginX + 190, toolBarY + 3);
+    }
+  } else if (screen == 3) {
+    fill(holidayMarkMode ? color(204, 0, 0) : color(230)); stroke(100); rect(marginX, toolBarY - 10, 220, 26, 4);
+    fill(holidayMarkMode ? 255 : 0); text("HOLIDAY ASSIGN MODE: " + (holidayMarkMode ? "ACTIVE" : "DISABLED"), marginX + 12, toolBarY + 3);
+    fill(100); text("Click any operational date module inside the viewport grid to toggle statutory term parameters.", marginX + 240, toolBarY + 3);
+  } else if (screen == 4) {
+    fill(borrowMode ? color(204, 102, 0) : color(230)); stroke(100); rect(marginX, toolBarY - 10, 200, 26, 4);
+    fill(borrowMode ? 255 : 0); text("SWAP / BORROW MUX: " + (borrowMode ? "ACTIVE" : "NORMAL"), marginX + 12, toolBarY + 3);
+    fill(100); text("Algorithm Protocol: Toggle SWAP/BORROW MUX, then click two subject blocks sequentially to rebuild curriculum sequence patterns.", marginX + 220, toolBarY + 3);
+  } else {
+    text("DOTE Operational Standards Target Tracking: 5 Hours/Week Baseline, 80 Hours/Semester Cap limit.", marginX, toolBarY + 3);
+  }
+}
+
+// ------------------------------------------------------------
+// SCREEN 1 VIEWPORTS: MAIN GRID & RAPID ENTRY SHEET
+// ------------------------------------------------------------
+void drawStudentRegisterGrid() {
+  int startY = marginTop;
+  int nameX = marginX;
+  int dateStartX = nameX + nameColW;
+  int tallyX1 = dateStartX + days * colW + 15;
+  int tallyX2 = tallyX1 + tallyColW;
+  int tallyX3 = tallyX2 + tallyColW;
+
+  int rowStartY = startY + headerH;
+  minScrollX1 = min(0, width - (tallyX3 + tallyColW + marginX));
+  minScrollY1 = min(0, height - (rowStartY + students * rowH + marginX));
+  
+  // Matrix Header Layout
+  fill(230); stroke(100);
+  rect(nameX, startY, nameColW, headerH);
+  for (int d = 0; d < days; d++) {
+    fill(isHoliday[d] ? color(255, 220, 220) : color(240));
+    rect(dateStartX + d * colW, startY, colW, headerH);
+  }
+  fill(230); rect(tallyX1, startY, tallyColW, headerH);
+  rect(tallyX2, startY, tallyColW, headerH);
+  rect(tallyX3, startY, tallyColW, headerH);
+
+  fill(0); textSize(11); textFont(createFont("Arial Bold", 11));
+  text("STUDENT POOL SPEC", nameX + nameColW / 2, startY + headerH / 2);
+  for (int d = 0; d < days; d++) {
+    pushMatrix(); translate(dateStartX + d * colW + colW / 2, startY + headerH / 2); rotate(-HALF_PI);
+    textSize(9); text(dateLabels[d], 0, 0); popMatrix();
+  }
+  text("ABS", tallyX1 + tallyColW / 2, startY + headerH / 2);
+  text("PRES", tallyX2 + tallyColW / 2, startY + headerH / 2);
+  text("MED", tallyX3 + tallyColW / 2, startY + headerH / 2);
+
+  // Data Body Rows Loop
+  int activeSemIdx = selectedSem - 1;
+  for (int s = 0; s < students; s++) {
+    int y = rowStartY + s * rowH;
+    
+    boolean hoverState = (mouseX - scrollX1 >= nameX && mouseX - scrollX1 <= nameX + nameColW && 
+                          mouseY - scrollY1 >= y && mouseY - scrollY1 < y + rowH);
+                          
+    fill(hoverState ? color(204, 229, 255) : (s % 2 == 0 ? 255 : 245)); stroke(180);
+    rect(nameX, y, nameColW, rowH);
+    fill(0); textAlign(LEFT, CENTER); text(" " + studentNames[activeSemIdx][s], nameX + 4, y + rowH / 2);
+
+    textAlign(CENTER, CENTER);
+    for (int d = 0; d < days; d++) {
+      int x = dateStartX + d * colW;
+      char stat = studentAttendance[activeSemIdx][s][d];
+      
+      if (stat == 'A') fill(255, 204, 204);
+      else if (stat == 'M') fill(204, 255, 204);
+      else if (stat == 'H') fill(240, 240, 240);
+      else fill(215, 230, 255);
+      
+      rect(x, y, colW, rowH);
+      fill(stat == 'A' ? color(204,0,0) : (stat == 'M' ? color(0,153,0) : (stat == 'H' ? color(120) : color(0,51,204))));
+      text(stat, x + colW / 2, y + rowH / 2);
+    }
+    
+    fill(50);
+    text(studentRowAbsent[activeSemIdx][s], tallyX1 + tallyColW / 2, y + rowH / 2);
+    text(studentRowPresent[activeSemIdx][s], tallyX2 + tallyColW / 2, y + rowH / 2);
+    text(studentRowMedical[activeSemIdx][s] + "/" + maxMedicalLeave, tallyX3 + tallyColW / 2, y + rowH / 2);
+  }
+}
+
+void drawStudentDetailView() {
+  int startY = marginTop + 15;
+  int activeSemIdx = selectedSem - 1;
+  
+  // Return Routine Interface Link
+  fill(240); stroke(100); rect(marginX, startY, 110, 32, 4);
+  fill(0); textSize(12); textFont(createFont("Arial Bold", 12));
+  text("<- BACK GRID", marginX + 55, startY + 16);
+  
+  fill(30); textAlign(LEFT, CENTER); textSize(18);
+  text("Rapid Matrix Entry Sheet: " + studentNames[activeSemIdx][selectedStudent], marginX + 140, startY + 16);
+  
+  // Statistical Counter Bar Overview
+  int statBoxX = width - 450;
+  fill(215, 230, 255); rect(statBoxX, startY, 100, 32, 4); fill(0,51,204); text("PRES: " + studentRowPresent[activeSemIdx][selectedStudent], statBoxX+50, startY+16);
+  fill(255, 204, 204); rect(statBoxX+110, startY, 100, 32, 4); fill(204,0,0); text("ABS: " + studentRowAbsent[activeSemIdx][selectedStudent], statBoxX+160, startY+16);
+  fill(204, 255, 204); rect(statBoxX+220, startY, 120, 32, 4); fill(0,153,0); text("MED: " + studentRowMedical[activeSemIdx][selectedStudent] + "/" + maxMedicalLeave, statBoxX+280, startY+16);
+
+  // Focus Vector Mapping Logic
+  int gridStartX = marginX;
+  int gridStartY = startY + 60;
+  int viewColumns = 10; 
+  int cellWidth = (width - 2 * marginX) / viewColumns;
+  int cellHeight = 44;
+  
+  for (int d = 0; d < days; d++) {
+    int colIndex = d % viewColumns;
+    int rowIndex = d / viewColumns;
+    int x = gridStartX + colIndex * cellWidth;
+    int y = gridStartY + rowIndex * cellHeight;
+    
+    // Evaluate if the spatial pointer intersects current focused vector bounds
+    boolean activeCursorFocus = (d == selectedDayIndex);
+    
+    char status = studentAttendance[activeSemIdx][selectedStudent][d];
+    if (activeCursorFocus) fill(255, 255, 153); // Highlighting matching focused bounds
+    else if (status == 'A') fill(255, 230, 230);
+    else if (status == 'M') fill(230, 255, 230);
+    else if (status == 'H') fill(245, 245, 245);
+    else fill(235, 245, 255);
+    
+    stroke(activeCursorFocus ? color(255, 102, 0) : color(180));
+    strokeWeight(activeCursorFocus ? 2 : 1);
+    rect(x, y, cellWidth, cellHeight, 2);
+    strokeWeight(1);
+    
+    fill(80); textSize(10); textAlign(LEFT, TOP);
+    text(" Day " + (d + 1) + " [" + dateLabels[d] + "]", x + 2, y + 3);
+    
+    textAlign(CENTER, CENTER); textSize(14); textFont(createFont("Arial Bold", 14));
+    fill(status == 'A' ? color(204,0,0) : (status == 'M' ? color(0,153,0) : (status == 'H' ? color(140) : color(0,51,204))));
+    text(status, x + cellWidth / 2, y + cellHeight / 2 + 5);
+  }
+}
+
+// ------------------------------------------------------------
+// SCREEN 2: STAFF REGISTRY DATABASE MATRIX VIEW
+// ------------------------------------------------------------
+void drawStaffRegisterGrid() {
+  int startY = marginTop;
+  int startX = marginX;
+  
+  int dateStartX = startX + nameColW + roleColW + subjColW;
+  int tallyX1 = dateStartX + days * colW + 15;
+  int tallyX2 = tallyX1 + tallyColW;
+  
+  int rowStartY = startY + headerH;
+  minScrollX2 = min(0, width - (tallyX2 + tallyColW + marginX));
+  minScrollY2 = min(0, height - (rowStartY + totalStaff * rowH + marginX));
+
+  // Render Structural Layout Header
+  fill(230); stroke(100);
+  int trackerX = startX;
+  rect(trackerX, startY, nameColW, headerH);
+  rect(trackerX += nameColW, startY, roleColW, headerH);
+  rect(trackerX += roleColW, startY, subjColW, headerH);
+  
+  for (int d = 0; d < days; d++) {
+    fill(isHoliday[d] ? color(255, 220, 220) : color(240));
+    rect(dateStartX + d * colW, startY, colW, headerH);
+  }
+  fill(230); rect(tallyX1, startY, tallyColW, headerH);
+  rect(tallyX2, startY, tallyColW, headerH);
+
+  fill(0); textSize(11); textFont(createFont("Arial Bold", 11)); trackerX = startX;
+  text("FACULTY MEMBER", trackerX + nameColW / 2, startY + headerH / 2);
+  text("DESIGNATION", (trackerX += nameColW) + roleColW / 2, startY + headerH / 2);
+  text("DOTE CORE TRACK", (trackerX += roleColW) + subjColW / 2, startY + headerH / 2);
+  
+  for (int d = 0; d < days; d++) {
+    pushMatrix(); translate(dateStartX + d * colW + colW / 2, startY + headerH / 2); rotate(-HALF_PI);
+    textSize(9); text(dateLabels[d], 0, 0); popMatrix();
+  }
+  text("ABS", tallyX1 + tallyColW / 2, startY + headerH / 2);
+  text("PRES", tallyX2 + tallyColW / 2, startY + headerH / 2);
+
+  // Render Data Rows Mapping Pool Coordinates
+  for (int i = 0; i < totalStaff; i++) {
+    int y = rowStartY + i * rowH;
+    trackerX = startX;
+    
+    fill(i % 2 == 0 ? 255 : 248); stroke(180);
+    rect(trackerX, y, nameColW, rowH);
+    rect(trackerX += nameColW, y, roleColW, rowH);
+    rect(trackerX += roleColW, y, subjColW, rowH);
+    
+    fill(0); textAlign(LEFT, CENTER); text(" " + staffNames[i], startX + 4, y + rowH / 2);
+    textAlign(CENTER, CENTER);
+    text(staffRoles[i], startX + nameColW + roleColW / 2, y + rowH / 2);
+    text(staffSubjects[i], startX + nameColW + roleColW + subjColW / 2, y + rowH / 2);
+    
+    for (int d = 0; d < days; d++) {
+      int x = dateStartX + d * colW;
+      char stat = staffAttendance[i][d];
+      
+      if (stat == 'A') fill(255, 204, 204);
+      else if (stat == 'H') fill(240, 240, 240);
+      else fill(215, 230, 255);
+      
+      rect(x, y, colW, rowH);
+      
+      // ERROR WAS HERE. Fixed the excessive trailing parentheses.
+      fill(stat == 'A' ? color(204,0,0) : (stat == 'H' ? color(120) : color(0,51,204)));
+      
+      text(stat, x + colW / 2, y + rowH / 2);
+    }
+    
+    fill(50);
+    int totalFacultyPresentDays = days - staffAbsences[i]; // Deduct absolute variance parameters
+    text(staffAbsences[i], tallyX1 + tallyColW / 2, y + rowH / 2);
+    text(totalFacultyPresentDays, tallyX2 + tallyColW / 2, y + rowH / 2);
+  }
+}
+
+// ------------------------------------------------------------
+// SCREEN 3: CALENDAR VIEW & TERM HOLIDAY PROPAGATION
+// ------------------------------------------------------------
+void drawSemesterCalendarView() {
+  int drawLeft = marginX;
+  int drawTop = marginTop + 15;
+  int spaceGapX = 20, spaceGapY = 20;
+  int blockW = (width - 2 * marginX - spaceGapX) / 3;
+  int blockH = (height - drawTop - 40 - spaceGapY) / 2;
+
+  // June 2026 Base Epoch
+  int initialMonthOffset = 5; 
+
+  for (int i = 0; i < 6; i++) {
+    int evaluationMonth = (initialMonthOffset + i) % 12;
+    int yearDelta = (initialMonthOffset + i >= 12) ? 1 : 0;
+    
+    int col = i % 3;
+    int row = i / 3;
+    int x = drawLeft + col * (blockW + spaceGapX);
+    int y = drawTop + row * (blockH + spaceGapY);
+
+    renderCalendarMatrixBlock(evaluationMonth, semesterYear + yearDelta, x, y, blockW, blockH, i);
+  }
+}
+
+void renderCalendarMatrixBlock(int mIdx, int yr, int x, int y, int w, int h, int sequenceNumber) {
+  fill(250); stroke(100); rect(x, y, w, h, 6);
+  fill(20, 40, 80); textAlign(LEFT, CENTER); textSize(14); textFont(createFont("Arial Bold", 14));
+  text("  " + monthNames[mIdx] + " " + yr, x + 6, y + 20);
+
+  float cellWidth = w / 7.0;
+  float cellHeight = (h - 50) / 6.0;
+  float startGridY = y + 40;
+
+  textAlign(CENTER, CENTER); textSize(10);
+  for (int d = 0; d < 7; d++) {
+    fill(230); stroke(160);
+    rect(x + d * cellWidth, startGridY, cellWidth, 20);
+    fill(50); text(weekNames[d], x + d * cellWidth + cellWidth / 2, startGridY + 10);
+  }
+
+  Calendar calendarInstance = new GregorianCalendar(yr, mIdx, 1);
+  int emptyCellOffset = (calendarInstance.get(Calendar.DAY_OF_WEEK) + 5) % 7; 
+  int maximumDaysInMonth = calendarInstance.getActualMaximum(Calendar.DAY_OF_MONTH);
+
+  // Standard Semester Mapping Algorithm across contiguous sequence offsets
+  int globalDayAccumulator = 0;
+  if (sequenceNumber > 0) {
+    Calendar structuralCalc = new GregorianCalendar(2026, 5, 1);
+    Calendar targetInstance = new GregorianCalendar(yr, mIdx, 1);
+    long timeDeltaMillis = targetInstance.getTimeInMillis() - structuralCalc.getTimeInMillis();
+    globalDayAccumulator = int(timeDeltaMillis / (1000 * 60 * 60 * 24));
+  }
+
+  for (int day = 1; day <= maximumDaysInMonth; day++) {
+    int linearTargetDay = globalDayAccumulator + (day - 1);
+    int gridIndex = emptyCellOffset + day - 1;
+    float cx = x + (gridIndex % 7) * cellWidth;
+    float cy = startGridY + 20 + (gridIndex / 7) * cellHeight;
+
+    if (linearTargetDay >= 0 && linearTargetDay < days) {
+      boolean flaggedHoliday = isHoliday[linearTargetDay];
+      fill(flaggedHoliday ? color(255, 204, 204) : color(255));
+      stroke(200); rect(cx, cy, cellWidth, cellHeight);
+      
+      fill(0); textAlign(LEFT, TOP); textSize(10); text(" " + day, cx + 2, cy + 2);
+      textAlign(CENTER, CENTER); textSize(12); textFont(createFont("Arial Bold", 11));
+      fill(flaggedHoliday ? color(204,0,0) : color(0,102,204));
+      text(flaggedHoliday ? "H" : "W", cx + cellWidth / 2, cy + cellHeight / 2 + 4);
+    } else {
+      fill(230); stroke(200); rect(cx, cy, cellWidth, cellHeight);
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// SCREEN 4: DME CORE TIMETABLE SUBSTATION LAYOUT
+// ------------------------------------------------------------
+void drawDME_TimetableScreen() {
+  int startX = marginX;
+  int startY = marginTop + 15;
+  int tableW = width - 2 * marginX;
+  int labelColW = 140;
+  int scheduleColW = (tableW - labelColW) / ttDays.length;
+  int blockH = (height - startY - 40) / 8;
+
+  // Render Time Blocks Layout Header
+  fill(235); stroke(100); rect(startX, startY, labelColW, blockH);
+  fill(0); textSize(11); textFont(createFont("Arial Bold", 11));
+  text("PERIOD / SCHEDULE", startX + labelColW / 2, startY + blockH / 2);
+  
+  for (int d = 0; d < ttDays.length; d++) {
+    int x = startX + labelColW + d * scheduleColW;
+    fill(235); stroke(100); rect(x, startY, scheduleColW, blockH);
+    fill(0); text(ttDays[d], x + scheduleColW / 2, startY + blockH / 2);
+  }
+
+  // Populate Active Timetable Structure Blocks
+  int activeSemIdx = selectedSem - 1;
+  int bodyStartY = startY + blockH;
+  
+  for (int p = 0; p < 7; p++) {
+    int y = bodyStartY + p * blockH;
+    fill(245); stroke(100); rect(startX, y, labelColW, blockH);
+    fill(0); text(ttPeriods[p], startX + labelColW / 2, y + blockH / 2);
+
+    for (int d = 0; d < ttDays.length; d++) {
+      int x = startX + labelColW + d * scheduleColW;
+      
+      boolean selectionPulseState = (borrowMode && clickState == 1 && sourceP == p && sourceD == d);
+      fill(selectionPulseState ? color(255, 204, 153) : color(255));
+      stroke(160); rect(x, y, scheduleColW, blockH);
+      
+      fill(0); textSize(11); textFont(createFont("Arial", 11));
+      text(DME_Timetable[activeSemIdx][d][p], x + scheduleColW / 2, y + blockH / 2);
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// SCREEN 5: REAL-TIME ADJUSTMENT ACCOUNTING MATRIX
+// ------------------------------------------------------------
+void drawAdjustmentAccountingScreen() {
+  int startY = marginTop + 15;
+  
+  fill(20, 40, 80); textAlign(LEFT, CENTER); textSize(16); textFont(createFont("Arial Bold", 16));
+  text("DOTE COMPLIANCE AUDIT SHEET (AUTOMATED SWAP & SUBSTITUTION LOG)", marginX, startY);
+
+  int tableTop = startY + 25;
+  int idW = 60, facultyW = 220, roleW = 150, weekHrsW = 160, semHrsW = 160, auditStatusW = 200;
+  int rowH3 = 34;
+  
+  // Render Compliance Matrix Header
+  fill(230); stroke(100);
+  int currentX = marginX;
+  rect(currentX, tableTop, idW, rowH3);
+  rect(currentX += idW, tableTop, facultyW, rowH3);
+  rect(currentX += facultyW, tableTop, roleW, rowH3);
+  rect(currentX += roleW, tableTop, weekHrsW, rowH3);
+  rect(currentX += weekHrsW, tableTop, semHrsW, rowH3);
+  rect(currentX += semHrsW, tableTop, auditStatusW, rowH3);
+
+  fill(0); textSize(11); textFont(createFont("Arial Bold", 11)); currentX = marginX;
+  text("S.NO", currentX + idW / 2, tableTop + rowH3 / 2);
+  text("FACULTY INS", (currentX += idW) + facultyW / 2, tableTop + rowH3 / 2);
+  text("ROLE TIER", (currentX += facultyW) + roleW / 2, tableTop + rowH3 / 2);
+  text("WEEK LOAD (MAX 5)", (currentX += roleW) + weekHrsW / 2, tableTop + rowH3 / 2);
+  text("SEM LOAD (TARGET 80)", (currentX += weekHrsW) + semHrsW / 2, tableTop + rowH3 / 2);
+  text("COMPLIANCE METRIC", (currentX += semHrsW) + auditStatusW / 2, tableTop + rowH3 / 2);
+
+  // Render Computed Row Metrics Dynamically
+  for (int i = 0; i < totalStaff; i++) {
+    int y = tableTop + rowH3 + i * rowH3;
+    currentX = marginX;
+    
+    fill(i % 2 == 0 ? 255 : 248); stroke(180);
+    rect(currentX, y, idW, rowH3);
+    rect(currentX += idW, y, facultyW, rowH3);
+    rect(currentX += facultyW, y, roleW, rowH3);
+    rect(currentX += roleW, y, weekHrsW, rowH3);
+    rect(currentX += weekHrsW, y, semHrsW, rowH3);
+    rect(currentX += semHrsW, y, auditStatusW, rowH3);
+
+    fill(50); textAlign(CENTER, CENTER); textFont(createFont("Arial", 11));
+    text((i + 1), marginX + idW / 2, y + rowH3 / 2);
+    textAlign(LEFT, CENTER); text(" " + staffNames[i], marginX + idW + 4, y + rowH3 / 2);
+    textAlign(CENTER, CENTER); text(staffRoles[i], marginX + idW + facultyW + roleW / 2, y + rowH3 / 2);
+    
+    // Check Weekly Load Threshold
+    boolean overWeeklyLoad = staffHoursWeekly[i] > 5;
+    fill(overWeeklyLoad ? color(204, 0, 0) : color(0, 153, 76));
+    text(staffHoursWeekly[i] + " / 5 Hrs", marginX + idW + facultyW + roleW + weekHrsW / 2, y + rowH3 / 2);
+    
+    // Check Semester Target Range Limit
+    boolean shortSemesterLoad = staffHoursSemester[i] < 80;
+    fill(shortSemesterLoad ? color(204, 102, 0) : color(0, 102, 204));
+    text(staffHoursSemester[i] + " / 80 Hrs", marginX + idW + facultyW + roleW + weekHrsW + semHrsW / 2, y + rowH3 / 2);
+    
+    // Evaluate System Status
+    String healthReport = "COMPLIANT";
+    fill(0, 153, 76);
+    if (overWeeklyLoad) {
+      healthReport = "OVERLOAD SUBSTITUTION";
+      fill(204, 102, 0);
+    } else if (shortSemesterLoad) {
+      healthReport = "UNDER HOURS TRACK";
+      fill(120, 120, 0);
+    }
+    textFont(createFont("Arial Bold", 10));
+    text(healthReport, marginX + idW + facultyW + roleW + weekHrsW + semHrsW + auditStatusW / 2, y + rowH3 / 2);
+  }
+}
+
+// ------------------------------------------------------------
+// INTERACTIVE CONTROL MUX INTERFACE OVERRIDES
+// ------------------------------------------------------------
+void mousePressed() {
+  // 1. Core Tab Selector Coordinates Evaluation
+  int tabW = 160; int tabH = 36; int tabY = 18;
+  for (int i = 0; i < 5; i++) {
+    int x = width - (5 - i) * (tabW + 10) - marginX;
+    if (mouseX >= x && mouseX <= x + tabW && mouseY >= tabY && mouseY <= tabY + tabH) {
+      screen = i + 1;
+      showingStudentDetail = false;
+      return;
+    }
+  }
+
+  // 2. Academic Semester Tier Navigation Coordinates Evaluation
+  int semBtnW = 140; int semBtnH = 32; int semBtnY = 75;
+  for (int i = 1; i <= 6; i++) {
+    int x = 250 + (i - 1) * (semBtnW + 8);
+    if (mouseX >= x && mouseX <= x + semBtnW && mouseY >= semBtnY && mouseY <= semBtnY + semBtnH) {
+      selectedSem = i;
+      recalculateSystemMetrics();
+      return;
+    }
+  }
+
+  // 3. Dynamic Toolbars Action Hooks
+  int toolBarY = 115;
+  if (mouseY >= toolBarY - 12 && mouseY <= toolBarY + 18) {
+    if (screen == 1 && !showingStudentDetail && mouseX >= marginX && mouseX <= marginX + 170) {
+      medicalMode = !medicalMode; return;
+    }
+    if (screen == 3 && mouseX >= marginX && mouseX <= marginX + 220) {
+      holidayMarkMode = !holidayMarkMode; return;
+    }
+    if (screen == 4 && mouseX >= marginX && mouseX <= marginX + 200) {
+      borrowMode = !borrowMode; clickState = 0; return;
+    }
+  }
+
+  // 4. Context Matrix Coordinates Evaluator Execution Paths
+  if (screen == 1) {
+    int activeSemIdx = selectedSem - 1;
+    if (showingStudentDetail) {
+      // Evaluate exit link boundary click
+      if (mouseX >= marginX && mouseX <= marginX + 110 && mouseY >= marginTop + 15 && mouseY <= marginTop + 47) {
+        showingStudentDetail = false;
+        return;
+      }
+      
+      // Handle interactive cell toggle updates inside sheet viewport
+      int gridStartX = marginX; int gridStartY = marginTop + 75;
+      int viewColumns = 10;
+      int cellWidth = (width - 2 * marginX) / viewColumns; int cellHeight = 44;
+      
+      int colClick = (mouseX - gridStartX) / cellWidth;
+      int rowClick = (mouseY - gridStartY) / cellHeight;
+      int dayFormulaIndex = rowClick * viewColumns + colClick;
+      
+      if (colClick >= 0 && colClick < viewColumns && dayFormulaIndex >= 0 && dayFormulaIndex < days) {
+        selectedDayIndex = dayFormulaIndex; // Relocate focus vector coordinate
+        executeDirectAttendanceCellMutation(activeSemIdx, selectedStudent, selectedDayIndex);
+      }
+      return;
+    } 
+    else {
+      // Base Data Matrix Cell Update Processing Engine
+      float transformedX = mouseX - scrollX1;
+      float transformedY = mouseY - scrollY1;
+      int rowStartY = marginTop + headerH;
+      
+      if (transformedY > rowStartY) {
+        if (transformedX >= marginX && transformedX <= marginX + nameColW) {
+          int targetedStudentRow = int((transformedY - rowStartY) / rowH);
+          if (targetedStudentRow >= 0 && targetedStudentRow < students) {
+            selectedStudent = targetedStudentRow;
+            selectedDayIndex = 0; // Reset focus to day index 0
+            showingStudentDetail = true;
+            return;
+          }
+        }
+        
+        int dateStartX = marginX + nameColW;
+        if (transformedX >= dateStartX && transformedX < dateStartX + days * colW) {
+          int dIdx = int((transformedX - dateStartX) / colW);
+          int sIdx = int((transformedY - rowStartY) / rowH);
+          
+          if (sIdx >= 0 && sIdx < students && dIdx >= 0 && dIdx < days) {
+            executeDirectAttendanceCellMutation(activeSemIdx, sIdx, dIdx);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  if (screen == 3 && holidayMarkMode) {
+    // Dynamic Global Timeline Holiday Interceptor Engine
+    int drawLeft = marginX; int drawTop = marginTop + 15;
+    int spaceGapX = 20; int spaceGapY = 20;
+    int blockW = (width - 2 * marginX - spaceGapX) / 3;
+    int blockH = (height - drawTop - 40 - spaceGapY) / 2;
+    int initialMonthOffset = 5;
+
+    for (int i = 0; i < 6; i++) {
+      int col = i % 3; int row = i / 3;
+      int x = drawLeft + col * (blockW + spaceGapX);
+      int y = drawTop + row * (blockH + spaceGapY);
+      
+      if (mouseX >= x && mouseX <= x + blockW && mouseY >= y && mouseY <= y + blockH) {
+        int evaluationMonth = (initialMonthOffset + i) % 12;
+        int yearDelta = (initialMonthOffset + i >= 12) ? 1 : 0;
+        float startGridY = y + 40;
+        float cellWidth = blockW / 7.0; float cellHeight = (blockH - 50) / 6.0;
+        
+        int colCell = int((mouseX - x) / cellWidth);
+        int rowCell = int((mouseY - (startGridY + 20)) / cellHeight);
+        
+        if (colCell >= 0 && colCell < 7 && rowCell >= 0 && rowCell < 6) {
+          Calendar calendarInstance = new GregorianCalendar(semesterYear + yearDelta, evaluationMonth, 1);
+          int emptyCellOffset = (calendarInstance.get(Calendar.DAY_OF_WEEK) + 5) % 7;
+          int computedDay = rowCell * 7 + colCell - emptyCellOffset + 1;
+          
+          if (computedDay >= 1 && computedDay <= calendarInstance.getActualMaximum(Calendar.DAY_OF_MONTH)) {
+            int globalDayAccumulator = 0;
+            if (i > 0) {
+              Calendar structuralCalc = new GregorianCalendar(2026, 5, 1);
+              Calendar targetInstance = new GregorianCalendar(semesterYear + yearDelta, evaluationMonth, 1);
+              long timeDeltaMillis = targetInstance.getTimeInMillis() - structuralCalc.getTimeInMillis();
+              globalDayAccumulator = int(timeDeltaMillis / (1000 * 60 * 60 * 24));
+            }
+            int targetGlobalDay = globalDayAccumulator + (computedDay - 1);
+            if (targetGlobalDay >= 0 && targetGlobalDay < days) {
+              isHoliday[targetGlobalDay] = !isHoliday[targetGlobalDay];
+              recalculateSystemMetrics();
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (screen == 4 && borrowMode) {
+    // Advanced Timetable Substitution MUX Algorithm Engine
+    int startX = marginX; int startY = marginTop + 15;
+    int tableW = width - 2 * marginX; int labelColW = 140;
+    int scheduleColW = (tableW - labelColW) / ttDays.length;
+    int blockH = (height - startY - 40) / 8;
+    int bodyStartY = startY + blockH;
+    
+    int colSelection = int((mouseX - (startX + labelColW)) / scheduleColW);
+    int rowSelection = int((mouseY - bodyStartY) / blockH);
+    
+    if (colSelection >= 0 && colSelection < ttDays.length && rowSelection >= 0 && rowSelection < 7 && mouseX >= startX + labelColW) {
+      if (clickState == 0) {
+        sourceP = rowSelection;
+        sourceD = colSelection;
+        clickState = 1;
+      } else {
+        int activeSemIdx = selectedSem - 1;
+        // Swap targeted content sequence mappings inside global matrix structure
+        String temporaryHoldingBuffer = DME_Timetable[activeSemIdx][colSelection][rowSelection];
+        DME_Timetable[activeSemIdx][colSelection][rowSelection] = DME_Timetable[activeSemIdx][sourceD][sourceP];
+        DME_Timetable[activeSemIdx][sourceD][sourceP] = temporaryHoldingBuffer;
+        
+        clickState = 0;
+        sourceP = -1; sourceD = -1;
+        recalculateSystemMetrics(); // Re-trigger resource recalculation engine immediately
+      }
+      return;
+    }
+  }
+
+  lastX = mouseX; lastY = mouseY;
+}
+
+void executeDirectAttendanceCellMutation(int semIdx, int sIdx, int dIdx) {
+  if (isHoliday[dIdx]) return; // Halt modifications on designated holidays
+  
+  if (medicalMode) {
+    if (studentAttendance[semIdx][sIdx][dIdx] == 'M') {
+      studentAttendance[semIdx][sIdx][dIdx] = 'P';
+    } else if (studentRowMedical[semIdx][sIdx] < maxMedicalLeave) {
+      studentAttendance[semIdx][sIdx][dIdx] = 'M';
+    }
+  } else {
+    studentAttendance[semIdx][sIdx][dIdx] = (studentAttendance[semIdx][sIdx][dIdx] == 'P') ? 'A' : 'P';
+  }
+  recalculateSystemMetrics();
+}
+
+// ------------------------------------------------------------
+// KEYBOARD COGNITIVE INPUT CONTROLLER (RAPID WORKFLOW ARROWS)
+// ------------------------------------------------------------
+void keyPressed() {
+  if (screen == 1 && showingStudentDetail) {
+    int activeSemIdx = selectedSem - 1;
+    
+    // Process arrow navigation commands across the contiguous sheet topology
+    if (keyCode == UP) {
+      if (selectedStudent > 0) {
+        selectedStudent--;
+        recalculateSystemMetrics();
+      }
+    } else if (keyCode == DOWN) {
+      if (selectedStudent < students - 1) {
+        selectedStudent++;
+        recalculateSystemMetrics();
+      }
+    } else if (keyCode == LEFT) {
+      if (selectedDayIndex > 0) {
+        selectedDayIndex--;
+      }
+    } else if (keyCode == RIGHT) {
+      if (selectedDayIndex < days - 1) {
+        selectedDayIndex++;
+      }
+    }
+    
+    // Process character code status updates
+    char keyCharacterInput = uppercaseTransformer(key);
+    if (keyCharacterInput == 'P' || keyCharacterInput == 'A' || keyCharacterInput == 'M') {
+      if (!isHoliday[selectedDayIndex]) {
+        if (keyCharacterInput == 'M') {
+          if (studentRowMedical[activeSemIdx][selectedStudent] < maxMedicalLeave || studentAttendance[activeSemIdx][selectedStudent][selectedDayIndex] == 'M') {
+            studentAttendance[activeSemIdx][selectedStudent][selectedDayIndex] = 'M';
+          }
+        } else {
+          studentAttendance[activeSemIdx][selectedStudent][selectedDayIndex] = keyCharacterInput;
+        }
+        recalculateSystemMetrics();
+        
+        // Auto-advance structural focus pointer index forward to save clicks
+        if (selectedDayIndex < days - 1) {
+          selectedDayIndex++;
+        }
+      }
+    }
+  }
+}
+
+char uppercaseTransformer(char lowCaseChar) {
+  if (lowCaseChar >= 'a' && lowCaseChar <= 'z') {
+    return char(lowCaseChar - 32);
+  }
+  return lowCaseChar;
+}
+
+// ------------------------------------------------------------
+// SCROLL SYSTEM MOUSE DRAG EVENT DISPATCHERS
+// ------------------------------------------------------------
+void mouseDragged() {
+  if (mouseY > marginTop) {
+    float deltaX = mouseX - lastX;
+    float deltaY = mouseY - lastY;
+    
+    if (screen == 1 && !showingStudentDetail) {
+      scrollX1 += deltaX; scrollY1 += deltaY;
+      scrollX1 = constrain(scrollX1, minScrollX1, 0);
+      scrollY1 = constrain(scrollY1, minScrollY1, 0);
+    } else if (screen == 2) {
+      scrollX2 += deltaX; scrollY2 += deltaY;
+      scrollX2 = constrain(scrollX2, minScrollX2, 0);
+      scrollY2 = constrain(scrollY2, minScrollY2, 0);
+    } else if (screen == 5) {
+      scrollX5 += deltaX; scrollY5 += deltaY;
+      scrollX5 = constrain(scrollX5, minScrollX5, 0);
+      scrollY5 = constrain(scrollY5, minScrollY5, 0);
+    }
+  }
+  lastX = mouseX; lastY = mouseY;
+}
